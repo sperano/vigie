@@ -122,6 +122,9 @@ func TestRowKeyAndErrorRow(t *testing.T) {
 	if row.Source != SourcePR || row.Origin != OriginGitHub || row.State != StateError || !row.NeedsYou || row.Detail != "gh logged out" {
 		t.Errorf("unexpected error row %+v", row)
 	}
+	if got := ErrorRow(SourceUsage, errors.New("secrets forbidden")).Origin; got != OriginKelos {
+		t.Errorf("usage error origin = %q, want %q", got, OriginKelos)
+	}
 	if got := ErrorRow(SourceKelosTask, errors.New("kubectl unavailable")).Origin; got != OriginUnknown {
 		t.Errorf("Kelos Task collector error origin = %q, want unknown", got)
 	}

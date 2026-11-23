@@ -146,10 +146,25 @@ func buildSources(cfg config.Config) ([]source.Named, error) {
 		{Name: source.SourcePR, Fetch: github.Fetch},
 		{Name: source.SourceVikunja, Fetch: vikunja.Fetch},
 	}
+	if usage := usageSource(cfg, kube, httpClient); usage != nil {
+		sources = append(sources, source.Named{Name: source.SourceUsage, Fetch: usage.Fetch})
+	}
 	if cfg.Serve {
 		return sources, nil
 	}
 	return append([]source.Named{{Name: source.SourceLocal, Fetch: fetchLocal}}, sources...), nil
+}
+
+// usageSource reports the agents' account limits, or nil when no account
+// Secret is configured.
+func usageSource(cfg config.Config, kube source.KubeClient, client *http.Client) *source.Usage {
+	if len(cfg.ClaudeSecrets) == 0 && cfg.CodexSecret == "" {
+		return nil
+	}
+	return &source.Usage{
+		Namespace: cfg.Namespace, ClaudeSecrets: cfg.ClaudeSecrets, ClaudeActive: cfg.ClaudeActive,
+		CodexSecret: cfg.CodexSecret, Every: cfg.UsageInterval, Kube: kube, Client: client, Now: time.Now,
+	}
 }
 
 // sourceNames lists the names of sources, in order.
