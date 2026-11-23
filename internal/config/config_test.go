@@ -61,6 +61,8 @@ func wantEnvConfig() Config {
 		Operator: envOperator, KelosUser: DefaultKelosUser, InProgressLabel: envLabel, PROpenLabel: envPROpenLabel,
 		ConsoleURL: envConsoleURL, LucarneURL: DefaultLucarneURL, LucarneCluster: DefaultLucarneCluster,
 		CappedExits: wantDefaultExits(), StaleDays: envStaleDays, Interval: envInterval, HiddenFile: envHiddenFile,
+		ClaudeSecrets: wantDefaultClaudeSecrets(), ClaudeActive: DefaultClaudeActive, CodexSecret: DefaultCodexSecret,
+		UsageInterval: DefaultUsageInterval,
 	}
 }
 
@@ -76,6 +78,8 @@ func TestParseDefaults(t *testing.T) {
 		Operator: DefaultOperator, KelosUser: DefaultKelosUser, InProgressLabel: DefaultInProgressLabel, PROpenLabel: DefaultPROpenLabel,
 		ConsoleURL: DefaultConsoleURL, LucarneURL: DefaultLucarneURL, LucarneCluster: DefaultLucarneCluster,
 		CappedExits: wantDefaultExits(), StaleDays: DefaultStaleDays, Interval: DefaultInterval,
+		ClaudeSecrets: wantDefaultClaudeSecrets(), ClaudeActive: DefaultClaudeActive, CodexSecret: DefaultCodexSecret,
+		UsageInterval: DefaultUsageInterval,
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %+v, want %+v", got, want)
@@ -222,6 +226,8 @@ func TestParseErrors(t *testing.T) {
 		{"bad legacy env duration", nil, map[string]string{"ATOP_INTERVAL": "soon"}, true, "ATOP_INTERVAL"},
 		{"zero interval flag", []string{"-interval", "0s"}, nil, true, ""},
 		{"negative interval env", nil, map[string]string{"VIGIE_INTERVAL": negativeSeconds}, true, ""},
+		{"zero usage interval flag", []string{"-usage-interval", "0s"}, nil, true, "usage interval must be positive, got 0s"},
+		{"bad usage interval env", nil, map[string]string{"VIGIE_USAGE_INTERVAL": "soon"}, true, "VIGIE_USAGE_INTERVAL"},
 		{"unknown flag", []string{"-nope"}, nil, false, ""},
 	}
 	for _, tt := range tests {

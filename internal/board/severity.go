@@ -9,7 +9,7 @@ type Severity string
 // a row that only needs you.
 const (
 	SeverityFailed    Severity = "failed"    // red: a failure or a source error
-	SeverityBlocked   Severity = "blocked"   // yellow: blocked work, conflicts
+	SeverityBlocked   Severity = "blocked"   // yellow: blocked work, conflicts, a limited account
 	SeverityBusy      Severity = "busy"      // green: any busy row (an agent, a row one speaks for, running checks, an agent started)
 	SeverityAttention Severity = "attention" // plain: needs you, nothing worse
 	SeverityQuiet     Severity = "quiet"     // dim: everything else, hidden rows
@@ -44,5 +44,10 @@ func failedState(r source.Row) bool {
 }
 
 func blockedState(r source.Row) bool {
-	return r.State == source.StateBlocked || r.State == source.StateConflicts
+	switch r.State {
+	case source.StateBlocked, source.StateConflicts, source.StateLimited:
+		return true
+	default:
+		return false
+	}
 }

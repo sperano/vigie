@@ -3,7 +3,9 @@
 A `top` for coding agents, originally named `atop` for **agent top**, now called
 `vigie`: which agent needs you, who is running what, who is idle. One table,
 refreshed every two minutes, covers five sources: local Claude Code sessions,
-Kelos Sessions and Tasks, open GitHub PRs, and in-progress Vikunja tasks.
+Kelos Sessions and Tasks, open GitHub PRs, and in-progress Vikunja tasks; a
+sixth lists the subscription limits of the Claude and ChatGPT accounts the
+Kelos agents run on.
 
 ```
 vigie · 2026-10-14 21:55:04 · 2 need you · 3 busy · 2 idle
@@ -23,7 +25,7 @@ vigie · 2026-10-14 21:55:04 · 2 need you · 3 busy · 2 idle
 ```
 
 Rows that need you come first and are marked `●`; failures and errors are
-red, blocked work and conflicts are yellow, active agents and the rows they
+red, blocked work, conflicts and limited accounts are yellow, active agents and the rows they
 work on (and PRs whose checks are running) are green, and
 inactive informational rows are dim. Attention-only rows with no failure,
 block, or active agent state use normal text. Each group is ordered most recent
@@ -49,8 +51,9 @@ go install github.com/sperano/vigie@latest
 - Access to the cluster: in a pod, its service account; elsewhere a
   kubeconfig (`KUBECONFIG`, else `~/.kube/config`, current context), as
   `kubectl` would use it. It needs `get` and `list` on Kelos Sessions, Tasks
-  and pods in the Kelos namespace, and `get` on the Vikunja token Secret
-  unless `VIKUNJA_API_TOKEN` is set. `kubectl` itself is not needed.
+  and pods in the Kelos namespace, `get` on the Vikunja token Secret
+  unless `VIKUNJA_API_TOKEN` is set, and `get` on the account Secrets of the
+  `usage` source unless those flags are empty. `kubectl` itself is not needed.
 - A GitHub token or a GitHub App installation (see Configuration). `gh` is
   needed only to supply a token on a laptop.
 - `tmux`, to jump to a local Claude Code session with enter.
@@ -222,6 +225,7 @@ than inferred from a Task name or prompt.
 | `kelos session` | Kelos Sessions: `busy`/`idle` from the `Active` condition, else the lowercased phase | the phase is `Failed` | the Kelos console |
 | `kelos task` | Kelos Tasks. While one runs, its state is what it does: `implementing`, `discussing`, `conflict fix`, `cubic fix` (a review bot's findings; the bot's name comes from the Task), `pr follow-up`, `task follow-up`; a plumbing Task shows its Kelos role (`merge-close`, `pr-open`, `conflict-reconcile`). Otherwise `blocked` (waiting on its blockers), `waiting` (queued behind the branch lock), `pending`, `done` for an hour after completion, then hidden; `capped` (stopped on purpose by one of `--capped-exits`, such as the review round limit) while its pod still exists; else `failed`, DETAIL naming the container that failed and its exit code (`kelos-agent exit 1`), or Kelos's message when no container exited non-zero (the pod gone, or none failed), or its Vikunja task and PR when that message is empty too; the activity then starts DETAIL | the Task failed, unless capped | its run in Lucarne; with `--lucarne-url` empty or no Task UID, its PR, else its Vikunja task, else its logs in the console |
 | `pr` | open PRs of the owner's non-archived repos (first 50): `draft`, `conflicts`, `checks failing`, `checks running`, `changes requested`, `awaiting your review`; a `kelos:<variant>` label prefixes the title with `[variant]` | conflicts, failing checks, or awaiting review | the PR |
+| `usage` | one row per Kelos agent account, named by its Secret: the Claude subscription tokens (`--claude-secrets`, a missing Secret has no row) and the Codex ChatGPT login (`--codex-secret`), DETAIL each window's use and reset (`5h 12% resets 2h · 7d 34% resets 3d`), the ChatGPT plan first and `[active]` before the Claude account whose token is in `--claude-active-secret`: `ok`, `warning` (Claude warns, or a window is 80% used), `limited`, or `error` when the provider refuses the token | an account is `limited` (a spare Claude account that Kelos does not use is not flagged), or in `error` | the provider's usage page |
 | `vikunja` | tasks labelled in progress and not done, NAME the task id then its project and number in that project (`#1647 - Hollingsworth #577`), the title prefixed with the agent user they are assigned to: `PR open` (the task carries the `pr open` label Kelos adds while its PR is open), `agent started` (Kelos's newest notice says an agent was started or queued for it; DETAIL ends with the Kelos Task it names), `agent stopped`, `merged`, `ready`, `discuss` (Kelos's newest notice reports one of these), `reply from <user>` (someone else spoke last, Kelos included for any other notice), `idle` (you spoke last, or nobody did, and no agent is running) | the newest comment is neither yours nor a Kelos notice that needs nothing of you, and the PR is not open | the task |
 
 An agent working on a row speaks for it: while a Kelos Task runs on a Vikunja
@@ -238,6 +242,17 @@ A PR or agent reply that would need you but has been untouched for
 `--stale-days` shows as `stale` and is not flagged, so abandoned experiments do
 not stay at the top forever. So does a Kelos start notice that old: its agent
 failed or vanished without a word.
+
+Account usage is read once per `--usage-interval`, and a refresh in between
+shows the last reading, its AGE the reading's. A Claude token from
+`claude setup-token` may only make model requests, so vigie sends the smallest
+one (one output token from Claude Haiku) and reads the
+`anthropic-ratelimit-unified-*` headers of the answer; each reading spends that
+much of the subscription. ChatGPT is asked at
+`https://chatgpt.com/backend-api/wham/usage`, the endpoint the Codex CLI reads
+its limits from, with the access token in the Secret's `auth.json`; vigie
+never refreshes it (the Kelos controller does), so a stale token shows as
+`error`. Neither endpoint is a documented interface.
 
 Local sessions are read from `~/.claude/sessions/<pid>.json`, skipping those
 whose process has exited. That directory is a Claude Code internal, not a
@@ -267,6 +282,10 @@ variable when the new name is unset.
 | `--capped-exits` (`<container>:<exit code>`, comma-separated; empty: every failure is `failed`) | `VIGIE_CAPPED_EXITS` | `review-round-cap:4` |
 | `--stale-days` | `VIGIE_STALE_DAYS` | `30` |
 | `--interval` | `VIGIE_INTERVAL` | `2m` |
+| `--claude-secrets` (comma-separated Secrets in `--namespace`, key `CLAUDE_CODE_OAUTH_TOKEN`; `--claude-secrets=` shows none, an empty variable keeps the default) | `VIGIE_CLAUDE_SECRETS` | `claude-oauth-primary,claude-oauth-secondary` |
+| `--claude-active-secret` (the copy Kelos uses now) | `VIGIE_CLAUDE_ACTIVE_SECRET` | `claude-oauth` |
+| `--codex-secret` (key `CODEX_AUTH_JSON`; `--codex-secret=` shows none) | `VIGIE_CODEX_SECRET` | `codex-oauth` |
+| `--usage-interval` | `VIGIE_USAGE_INTERVAL` | `10m` |
 | `--hidden-file` | `VIGIE_HIDDEN_FILE` | `<user config dir>/vigie/hidden.json` (`~/.config` on Linux, `~/Library/Application Support` on macOS) |
 | `--once` | | off |
 | `--listen` (`vigie serve` only) | `VIGIE_LISTEN` | `:8080` |

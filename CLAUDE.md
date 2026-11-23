@@ -28,6 +28,7 @@ render.
 | Kelos Sessions | client-go REST client, list `sessions.kelos.dev` (`v1alpha2`) in `kelos-agents`; `Active` condition | `busy`, `idle`, lowercased phase if not Ready | phase Failed |
 | Kelos Tasks | list `tasks.kelos.dev` + pods `-l kelos.dev/component=task` whose phase is not `Succeeded` | while Running, its activity: `implementing` (no role label, `vikunja.spe.quebec/task` label), `discussing` (name `vikunja-discuss-*`), `conflict fix` (role `pr-conflict`), `<bot> fix` (role `pr-followup` whose prompt names a `Review bot:` and whose `<request>` is not a `/` command; `cubic-dev-ai[bot]` → `cubic`), `pr follow-up`, `task follow-up`, any other role as is, else `running`; `blocked` (the `wait-for-blockers` init container is running), `waiting`, `pending`, `done` for 1 h after completion, then hidden; `capped` while the Task and its pod exist when the pod failed on one of the capped exits (`review-round-cap:4`, the review round limit); else `failed`, DETAIL naming the first container (init containers first) that exited non-zero and its code (`kelos-agent exit 1`), else Kelos's message, else its Vikunja task and PR; DETAIL starts with the activity when the state is a phase | Failed, unless capped |
 | GitHub PRs | POST to `https://api.github.com/graphql` (token: minted from the `VIGIE_GITHUB_APP_*` App when all three are set, read-only permissions, renewed 5 min before expiry; else `GH_TOKEN`, else `GITHUB_TOKEN`, else `gh auth token`; half set is a start-up error); search `is:pr is:open owner:<owner> archived:false`, first 50 | `draft`, `conflicts`, `checks failing`, `checks running`, `changes requested`, `review`; a `kelos:<variant>` label → detail `[variant] title` | conflicts, checks failing, review |
+| Account usage | Secrets in the Kelos namespace: `claude-oauth-primary`, `claude-oauth-secondary` (key `CLAUDE_CODE_OAUTH_TOKEN`; a missing one has no row) and `codex-oauth` (key `CODEX_AUTH_JSON`, `~/.codex/auth.json`). Claude: a one-token Haiku request to `/v1/messages` (`anthropic-beta: oauth-2025-04-20`; a `setup-token` token is inference-only), reading the `anthropic-ratelimit-unified-*` headers of the answer, 429 included. Codex: `GET https://chatgpt.com/backend-api/wham/usage` with the access token and `ChatGPT-Account-Id`; never refresh the token (the Kelos controller does). A reading is reused for `--usage-interval` (default 10m) per Secret value | `ok`, `warning` (Claude's `allowed_warning`, or a window ≥ 80%), `limited`, `error` (that account only; an unreadable Secret fails the source); DETAIL `[active]` (token equals `claude-oauth`'s), the ChatGPT plan, each window `5h 12% resets 2h` | limited (the active Claude account or Codex), error |
 | Vikunja | tasks with label id 1 (`in progress`) and `done = false`, paginated; the newest comment per task; the project titles (`/projects`, archived included, paginated); NAME is `#<id>` (the row's identity) shown as `#<id> - <project title> #<index>` (`Row.Label`), DETAIL is `[assignee] title` | `in review` (label titled `pr open`, whatever the comments), `agent started` (busy) / `agent stopped` / `merged` / `ready` / `discuss` / `PR open` (the `--kelos-user`'s newest comment ends with a marker of a kind that needs nothing of you, below), `reply from <user>`, `idle` (operator spoke last, or no comments) | the newest comment is neither the operator's nor such a Kelos notice, and the PR is not open |
 
 - **Newest comment:** expand `comments` and `comment_count` on the task list.
@@ -126,6 +127,7 @@ Bubble Tea v2 stack: `charm.land/bubbletea/v2`, `charm.land/bubbles/v2`,
 | pr | the PR URL |
 | kelos task | its Lucarne run, `<lucarne>/runs/<cluster>/<ns>/<Task UID>`; with no Lucarne URL (or no UID), its PR (`status.results.pr`); else the Vikunja task in label `vikunja.spe.quebec/task`; else `<console>/api/resources/tasks/<ns>/<name>/logs` (the console has no per-task page) |
 | kelos session | the console base URL |
+| usage | `https://claude.ai/settings/usage`, `https://chatgpt.com/codex/settings/usage` |
 | local claude | `tmux switch-client -t <pane>` when `$TMUX` is set (the stored value looks like `hollingsworth:@5.%6`); otherwise footer "not in tmux" |
 | error | nothing |
 
@@ -153,6 +155,7 @@ hard-coded beyond these defaults:
 | Capped Task exits (`<container>:<code>`, comma-separated, as the chart's `EXPECTED_EXITS`) | `review-round-cap:4` |
 | Stale days | `30` |
 | Refresh interval | `2m` |
+| Account usage Secrets (empty turns each off) / active Claude copy / reading lifetime | `claude-oauth-primary,claude-oauth-secondary`, `codex-oauth` / `claude-oauth` / `10m` |
 | Hidden-rows file | `<os.UserConfigDir>/vigie/hidden.json` |
 | Server listen address (`vigie serve` only; not empty) | `:8080` |
 
@@ -200,4 +203,4 @@ the loaded set to the new path on its first change.
 - Work in a git worktree under `.claude/worktrees/<branch>`; never on `main`.
   End every task with a PR.
 - Before calling the work done, run `vigie --once` against the live sources and
-  confirm that rows come from all five.
+  confirm that rows come from all five (six with account usage).

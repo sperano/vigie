@@ -43,17 +43,20 @@ func TestHiddenStoreCustomPathHasNoLegacyFallback(t *testing.T) {
 
 func TestBuildSources(t *testing.T) {
 	agentAndWork := []string{source.SourceKelosSession, source.SourceKelosTask, source.SourcePR, source.SourceVikunja}
+	withUsage := append(slices.Clone(agentAndWork), source.SourceUsage)
 	tests := []struct {
-		name  string
-		serve bool
-		want  []string
+		name string
+		cfg  config.Config
+		want []string
 	}{
-		{"tui reads local sessions", false, append([]string{source.SourceLocal}, agentAndWork...)},
-		{"serve leaves local sessions out", true, agentAndWork},
+		{"tui reads local sessions", config.Config{}, append([]string{source.SourceLocal}, agentAndWork...)},
+		{"serve leaves local sessions out", config.Config{Serve: true}, agentAndWork},
+		{"claude accounts add usage", config.Config{Serve: true, ClaudeSecrets: config.NameList{"c"}}, withUsage},
+		{"codex account adds usage", config.Config{Serve: true, CodexSecret: "x"}, withUsage},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			sources, err := buildSources(config.Config{Serve: tt.serve})
+			sources, err := buildSources(tt.cfg)
 			if err != nil {
 				t.Fatalf("buildSources: %v", err)
 			}

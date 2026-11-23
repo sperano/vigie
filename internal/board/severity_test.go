@@ -23,6 +23,8 @@ func TestSeverityOf(t *testing.T) {
 		{"source error", source.ErrorRow(source.SourcePR, errors.New("down")), false, SeverityFailed},
 		{"blocked", source.Row{Source: source.SourceKelosTask, State: source.StateBlocked}, false, SeverityBlocked},
 		{"conflicts", source.Row{Source: source.SourcePR, State: source.StateConflicts}, false, SeverityBlocked},
+		{"limited account", source.Row{Source: source.SourceUsage, State: source.StateLimited}, false, SeverityBlocked},
+		{"account near its limit", source.Row{Source: source.SourceUsage, State: source.StateWarning}, false, SeverityQuiet},
 		{"active agent", source.Row{Source: source.SourceLocal, State: source.StateBusy, Busy: true, NeedsYou: true}, false, SeverityBusy},
 		{"busy PR is busy", source.Row{Source: source.SourcePR, State: "checks running", Busy: true}, false, SeverityBusy},
 		{"vikunja row an agent speaks for is busy", source.Row{Source: source.SourceVikunja, State: "implementing", Busy: true}, false, SeverityBusy},

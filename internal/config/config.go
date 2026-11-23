@@ -35,8 +35,16 @@ const (
 	DefaultStaleDays   = 30
 	DefaultInterval    = 2 * time.Minute
 	DefaultListen      = ":8080"
-	currentEnvPrefix   = "VIGIE_"
-	legacyEnvPrefix    = "ATOP_"
+	// DefaultClaudeSecrets are the Kelos chart's stored Claude subscription
+	// tokens; DefaultClaudeActive is the copy the agents use now.
+	DefaultClaudeSecrets = "claude-oauth-primary,claude-oauth-secondary"
+	DefaultClaudeActive  = "claude-oauth"
+	DefaultCodexSecret   = "codex-oauth"
+	// DefaultUsageInterval is how long an account's usage reading is kept:
+	// each Claude reading is a (one-token) request on the subscription.
+	DefaultUsageInterval = 10 * time.Minute
+	currentEnvPrefix     = "VIGIE_"
+	legacyEnvPrefix      = "ATOP_"
 )
 
 // ServeCommand is the subcommand that starts the HTTP server.
@@ -62,6 +70,13 @@ type Config struct {
 	CappedExits ExitList
 	StaleDays   int
 	Interval    time.Duration
+	// ClaudeSecrets, ClaudeActive and CodexSecret name the Secrets in
+	// Namespace of the accounts whose usage is shown; empty ones are off.
+	ClaudeSecrets NameList
+	ClaudeActive  string
+	CodexSecret   string
+	// UsageInterval is how long an account's usage reading is reused.
+	UsageInterval time.Duration
 	// HiddenFile is where hidden rows are kept; empty means
 	// hidden.DefaultFile.
 	HiddenFile string
@@ -103,6 +118,9 @@ func Parse(name string, args []string, getenv func(string) string) (Config, erro
 	if c.Interval <= 0 {
 		return Config{}, fmt.Errorf("%w: interval must be positive, got %s", ErrInvalid, c.Interval)
 	}
+	if c.UsageInterval <= 0 {
+		return Config{}, fmt.Errorf("%w: usage interval must be positive, got %s", ErrInvalid, c.UsageInterval)
+	}
 	return c, nil
 }
 
@@ -125,12 +143,25 @@ func (c *Config) register(fs *flag.FlagSet, env *envDefaults) {
 	fs.Var(&c.CappedExits, "capped-exits", "comma-separated <container>:<exit code> stops of a Kelos Task shown as capped, not failed; empty shows every failure as failed (VIGIE_CAPPED_EXITS)")
 	fs.IntVar(&c.StaleDays, "stale-days", env.renamedInteger("STALE_DAYS", DefaultStaleDays), "days after which an untouched PR or reply is stale (VIGIE_STALE_DAYS)")
 	fs.DurationVar(&c.Interval, "interval", env.renamedDuration("INTERVAL", DefaultInterval), "refresh interval (VIGIE_INTERVAL)")
+	c.registerUsage(fs, env)
 	fs.StringVar(&c.HiddenFile, "hidden-file", env.renamedStr("HIDDEN_FILE", ""), "file of the hidden rows (VIGIE_HIDDEN_FILE; default <user config dir>/vigie/hidden.json)")
 	if c.Serve {
 		fs.StringVar(&c.Listen, "listen", env.str(currentEnvPrefix+"LISTEN", "", DefaultListen), "address the server listens on (VIGIE_LISTEN)")
 		return
 	}
 	fs.BoolVar(&c.Once, "once", false, "print one plain-text snapshot and exit")
+}
+
+// registerUsage defines the flags of the account usage source.
+func (c *Config) registerUsage(fs *flag.FlagSet, env *envDefaults) {
+	key := currentEnvPrefix + "CLAUDE_SECRETS"
+	if err := c.ClaudeSecrets.Set(env.str(key, "", DefaultClaudeSecrets)); err != nil {
+		env.fail(key, err)
+	}
+	fs.Var(&c.ClaudeSecrets, "claude-secrets", "comma-separated Secrets in the Kelos namespace holding the Claude subscription tokens whose usage is shown; empty shows none (VIGIE_CLAUDE_SECRETS)")
+	fs.StringVar(&c.ClaudeActive, "claude-active-secret", env.str(currentEnvPrefix+"CLAUDE_ACTIVE_SECRET", "", DefaultClaudeActive), "Secret holding the Claude token Kelos uses now; the account matching it is marked active (VIGIE_CLAUDE_ACTIVE_SECRET)")
+	fs.StringVar(&c.CodexSecret, "codex-secret", env.str(currentEnvPrefix+"CODEX_SECRET", "", DefaultCodexSecret), "Secret holding the Codex (ChatGPT) login whose usage is shown; empty shows none (VIGIE_CODEX_SECRET)")
+	fs.DurationVar(&c.UsageInterval, "usage-interval", env.duration(currentEnvPrefix+"USAGE_INTERVAL", "", DefaultUsageInterval), "how long an account's usage reading is reused (VIGIE_USAGE_INTERVAL)")
 }
 
 // envDefaults reads defaults from the environment, keeping the first parse error.
@@ -157,7 +188,11 @@ func (e *envDefaults) renamedInteger(suffix string, fallback int) int {
 }
 
 func (e *envDefaults) renamedDuration(suffix string, fallback time.Duration) time.Duration {
-	key, v := e.value(currentEnvPrefix+suffix, legacyEnvPrefix+suffix)
+	return e.duration(currentEnvPrefix+suffix, legacyEnvPrefix+suffix, fallback)
+}
+
+func (e *envDefaults) duration(primary, legacy string, fallback time.Duration) time.Duration {
+	key, v := e.value(primary, legacy)
 	if v == "" {
 		return fallback
 	}

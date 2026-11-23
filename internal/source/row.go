@@ -17,6 +17,8 @@ const (
 	SourceKelosTask    = "kelos task"
 	SourcePR           = "pr"
 	SourceVikunja      = "vikunja"
+	// SourceUsage rows are the subscription limits of the agents' accounts.
+	SourceUsage = "usage"
 )
 
 // Origin names identify where work represented by a row began.
@@ -109,7 +111,7 @@ func defaultOrigin(source string) string {
 	switch source {
 	case SourceLocal:
 		return OriginLocal
-	case SourceKelosSession:
+	case SourceKelosSession, SourceUsage:
 		return OriginKelos
 	case SourcePR:
 		return OriginGitHub
