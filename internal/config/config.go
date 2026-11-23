@@ -70,8 +70,10 @@ type Config struct {
 	CappedExits ExitList
 	StaleDays   int
 	Interval    time.Duration
-	// ClaudeSecrets, ClaudeActive and CodexSecret name the Secrets in
-	// Namespace of the accounts whose usage is shown; empty ones are off.
+	// ClaudeSecrets and CodexSecret name the Secrets in Namespace of the
+	// accounts whose usage is shown; empty ones are off. ClaudeActive is
+	// the Secret of the token Kelos uses now; empty (or missing), no
+	// Claude account is marked active and every limited one needs you.
 	ClaudeSecrets NameList
 	ClaudeActive  string
 	CodexSecret   string

@@ -78,7 +78,7 @@ func codexServer(t *testing.T, status int, body string) (*httptest.Server, *reco
 	t.Helper()
 	rec := &recorder{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		rec.add(r, claudeProbe{})
+		rec.add(r, nil)
 		w.WriteHeader(status)
 		_, _ = w.Write([]byte(body))
 	}))

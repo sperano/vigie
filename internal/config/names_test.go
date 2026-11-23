@@ -25,6 +25,7 @@ func TestNameListSet(t *testing.T) {
 		{"one", "a", NameList{"a"}},
 		{"several, trimmed", " a , b ", NameList{"a", "b"}},
 		{"blank names dropped", "a,,  ,b,", NameList{"a", "b"}},
+		{"repeated names dropped", "a,b, a,b", NameList{"a", "b"}},
 		{"empty clears", "", nil},
 	}
 	for _, tt := range tests {
@@ -77,6 +78,10 @@ func TestParseUsage(t *testing.T) {
 		{"env overrides default", nil, env, usageSettings{NameList{"one", "two"}, "env-active", "env-codex", envUsageInterval}},
 		{"flag beats env", []string{"-claude-secrets", "three", "-codex-secret", "flag-codex", "-usage-interval", "30s"}, env,
 			usageSettings{NameList{"three"}, "env-active", "flag-codex", flagUsageInterval}},
+		{"active flag beats env", []string{"-claude-active-secret", "flag-active"}, env,
+			usageSettings{NameList{"one", "two"}, "flag-active", "env-codex", envUsageInterval}},
+		{"empty active flag marks none", []string{"-claude-active-secret="}, env,
+			usageSettings{NameList{"one", "two"}, "", "env-codex", envUsageInterval}},
 		{"empty flags turn the accounts off", []string{"-claude-secrets=", "-codex-secret="}, env,
 			usageSettings{nil, "env-active", "", envUsageInterval}},
 		{"empty env keeps the defaults", nil, empty, usageSettings{wantDefaultClaudeSecrets(), DefaultClaudeActive, DefaultCodexSecret, DefaultUsageInterval}},

@@ -3,8 +3,10 @@ package source
 import (
 	"context"
 	"errors"
+	"maps"
 	"net/http"
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -129,6 +131,45 @@ func TestUsageNewTokenIsReadAgain(t *testing.T) {
 	if got := len(f.claudeCalls.requests()); got != 2 {
 		t.Errorf("claude probed %d times, want 2 (the token changed)", got)
 	}
+	want := cacheKey(usageAccount{name: primarySecret, secret: secondaryToken})
+	if keys := slices.Collect(maps.Keys(f.usage.cache)); !reflect.DeepEqual(keys, []string{want}) {
+		t.Errorf("cache holds %d readings, want only the new token's", len(keys))
+	}
+}
+
+func TestUsageLimitedNeedsYou(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		secrets []kubeObject
+		active  string
+		want    map[string]bool
+	}{
+		{"only the active claude account", allSecrets(), activeSecret,
+			map[string]bool{primarySecret: false, secondarySecret: true}},
+		{"every claude account without an active secret", allSecrets(), "",
+			map[string]bool{primarySecret: true, secondarySecret: true}},
+		{"every claude account when the active copy is missing", allSecrets()[:2], activeSecret,
+			map[string]bool{primarySecret: true, secondarySecret: true}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			f := newUsageFixture(t, http.StatusTooManyRequests, claudeHeaders("rejected", "1", ""), tt.secrets...)
+			f.usage.CodexSecret, f.usage.ClaudeActive = "", tt.active
+			rows, err := f.usage.Fetch(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := map[string]bool{}
+			for _, r := range rows {
+				got[r.Name] = r.NeedsYou
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("needs you %v, want %v", got, tt.want)
+			}
+		})
+	}
 }
 
 func TestUsageFailedReadingIsRetried(t *testing.T) {
@@ -218,7 +259,8 @@ func TestUsageRow(t *testing.T) {
 	t.Parallel()
 	limited := usageReport{State: StateLimited, Read: testNow, Windows: []usageWindow{{Span: 5 * time.Hour, Used: 100, ResetsAt: testNow.Add(90 * time.Minute)}}}
 	ok := usageReport{State: StateOK, Read: testNow, Windows: []usageWindow{{Span: 7 * Day, Used: 3}}}
-	claude := usageAccount{name: primarySecret}
+	spare := usageAccount{name: primarySecret, spare: true}
+	unknown := usageAccount{name: primarySecret}
 	active := usageAccount{name: primarySecret, active: true}
 	codex := usageAccount{name: codexSecret, codex: true}
 	tests := []struct {
@@ -231,9 +273,11 @@ func TestUsageRow(t *testing.T) {
 		wantNeeds  bool
 	}{
 		{"limited active claude needs you", active, limited, nil, StateLimited, "[active] 5h 100% resets 1h", true},
-		{"limited spare claude does not", claude, limited, nil, StateLimited, "5h 100% resets 1h", false},
+		{"limited spare claude does not", spare, limited, nil, StateLimited, "5h 100% resets 1h", false},
+		{"limited claude with no known active one needs you", unknown, limited, nil, StateLimited, "5h 100% resets 1h", true},
 		{"limited codex needs you", codex, limited, nil, StateLimited, "5h 100% resets 1h", true},
 		{"ok active claude", active, ok, nil, StateOK, "[active] 7d 3%", false},
+		{"error on spare claude needs you", spare, usageReport{}, errors.New("claude: HTTP 401 Unauthorized"), StateError, "claude: HTTP 401 Unauthorized", true},
 		{"error needs you", active, usageReport{}, errors.New("claude: HTTP 401 Unauthorized"), StateError, "[active] claude: HTTP 401 Unauthorized", true},
 	}
 	for _, tt := range tests {

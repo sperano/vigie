@@ -203,7 +203,9 @@ reached over HTTPS) and the licenses of everything it ships under
 `/licenses`. It runs as `65532:65532`, listens on `8080`, and keeps its hidden
 rows in `/data/hidden.json` (`VIGIE_HIDDEN_FILE`): mount a writable volume on
 `/data` to keep them across restarts. Probe `GET /healthz` and
-`GET /readyz`. In a pod it reads Kelos (and the Vikunja token Secret, unless
+`GET /readyz`. In a pod it reads Kelos, the account usage Secrets
+(`--claude-secrets`, `--claude-active-secret`, `--codex-secret`: its Role needs
+`get` on them, or set those flags empty) and the Vikunja token Secret (unless
 `VIKUNJA_API_TOKEN` is set) with its service account, and mints GitHub
 tokens from the `VIGIE_GITHUB_APP_*` variables, else takes one from `GH_TOKEN`
 or `GITHUB_TOKEN` (there is no `gh` in the image).
@@ -211,7 +213,8 @@ or `GITHUB_TOKEN` (there is no `gh` in the image).
 ## Types and origins
 
 TYPE says what a row represents. ORIGIN says where its work began: `local`
-for local Claude sessions, `kelos` for Kelos Sessions, `github` for PRs,
+for local Claude sessions, `kelos` for Kelos Sessions and account usage,
+`github` for PRs,
 and `vikunja` for Vikunja tasks. Kelos Tasks use the explicit
 `kelos.dev/origin` label, whose supported values are `github`, `vikunja`,
 and `wiki`; a missing or unrecognized value is shown as `unknown` rather
@@ -225,7 +228,7 @@ than inferred from a Task name or prompt.
 | `kelos session` | Kelos Sessions: `busy`/`idle` from the `Active` condition, else the lowercased phase | the phase is `Failed` | the Kelos console |
 | `kelos task` | Kelos Tasks. While one runs, its state is what it does: `implementing`, `discussing`, `conflict fix`, `cubic fix` (a review bot's findings; the bot's name comes from the Task), `pr follow-up`, `task follow-up`; a plumbing Task shows its Kelos role (`merge-close`, `pr-open`, `conflict-reconcile`). Otherwise `blocked` (waiting on its blockers), `waiting` (queued behind the branch lock), `pending`, `done` for an hour after completion, then hidden; `capped` (stopped on purpose by one of `--capped-exits`, such as the review round limit) while its pod still exists; else `failed`, DETAIL naming the container that failed and its exit code (`kelos-agent exit 1`), or Kelos's message when no container exited non-zero (the pod gone, or none failed), or its Vikunja task and PR when that message is empty too; the activity then starts DETAIL | the Task failed, unless capped | its run in Lucarne; with `--lucarne-url` empty or no Task UID, its PR, else its Vikunja task, else its logs in the console |
 | `pr` | open PRs of the owner's non-archived repos (first 50): `draft`, `conflicts`, `checks failing`, `checks running`, `changes requested`, `awaiting your review`; a `kelos:<variant>` label prefixes the title with `[variant]` | conflicts, failing checks, or awaiting review | the PR |
-| `usage` | one row per Kelos agent account, named by its Secret: the Claude subscription tokens (`--claude-secrets`, a missing Secret has no row) and the Codex ChatGPT login (`--codex-secret`), DETAIL each window's use and reset (`5h 12% resets 2h · 7d 34% resets 3d`), the ChatGPT plan first and `[active]` before the Claude account whose token is in `--claude-active-secret`: `ok`, `warning` (Claude warns, or a window is 80% used), `limited`, or `error` when the provider refuses the token | an account is `limited` (a spare Claude account that Kelos does not use is not flagged), or in `error` | the provider's usage page |
+| `usage` | one row per Kelos agent account, named by its Secret: the Claude subscription tokens (`--claude-secrets`, a missing Secret has no row) and the Codex ChatGPT login (`--codex-secret`), DETAIL each window's use and reset (`5h 12% resets 2h · 7d 34% resets 3d`), the ChatGPT plan first and `[active]` before the Claude account whose token is in `--claude-active-secret`: `ok`, `warning` (Claude warns, or a window is 80% used), `limited`, or `error` when the provider refuses the token | an account is `limited` (a spare Claude account is not flagged while `--claude-active-secret` is readable and holds another token), or in `error` (a spare account too) | the provider's usage page |
 | `vikunja` | tasks labelled in progress and not done, NAME the task id then its project and number in that project (`#1647 - Hollingsworth #577`), the title prefixed with the agent user they are assigned to: `PR open` (the task carries the `pr open` label Kelos adds while its PR is open), `agent started` (Kelos's newest notice says an agent was started or queued for it; DETAIL ends with the Kelos Task it names), `agent stopped`, `merged`, `ready`, `discuss` (Kelos's newest notice reports one of these), `reply from <user>` (someone else spoke last, Kelos included for any other notice), `idle` (you spoke last, or nobody did, and no agent is running) | the newest comment is neither yours nor a Kelos notice that needs nothing of you, and the PR is not open | the task |
 
 An agent working on a row speaks for it: while a Kelos Task runs on a Vikunja

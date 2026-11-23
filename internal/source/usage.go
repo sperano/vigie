@@ -61,6 +61,9 @@ type usageAccount struct {
 	codex  bool
 	secret string // the Secret value: a Claude token or a Codex auth.json
 	active bool   // the Claude account Kelos runs on now
+	// spare is a Claude account Kelos is known not to run on now: the
+	// active copy is readable and holds another token.
+	spare bool
 }
 
 // Usage reports the subscription limits (the 5 h and weekly windows) of the
@@ -83,7 +86,7 @@ type Usage struct {
 	ClaudeURL, CodexURL string
 
 	mu    sync.Mutex
-	cache map[string]usageReport // by account name and secret hash
+	cache map[string]usageReport // by cacheKey
 }
 
 // Fetch lists one row per account. A Secret that cannot be read fails the
@@ -93,6 +96,7 @@ func (u *Usage) Fetch(ctx context.Context) ([]Row, error) {
 	if err != nil {
 		return nil, err
 	}
+	u.prune(accounts)
 	rows := make([]Row, len(accounts))
 	var wg sync.WaitGroup
 	for i, a := range accounts {
@@ -118,7 +122,8 @@ func (u *Usage) accounts(ctx context.Context) ([]usageAccount, error) {
 			return nil, err
 		}
 		if token != "" {
-			accounts = append(accounts, usageAccount{name: name, secret: token, active: token == active})
+			accounts = append(accounts, usageAccount{name: name, secret: token,
+				active: token == active, spare: active != "" && token != active})
 		}
 	}
 	auth, err := u.optionalSecret(ctx, u.CodexSecret, codexAuthKey)
@@ -147,7 +152,7 @@ func (u *Usage) optionalSecret(ctx context.Context, name, key string) (string, e
 // report asks the account's provider, or reuses a reading younger than
 // Every of the same Secret value.
 func (u *Usage) report(ctx context.Context, a usageAccount) (usageReport, error) {
-	key := fmt.Sprintf("%s\x00%x", a.name, sha256.Sum256([]byte(a.secret)))
+	key := cacheKey(a)
 	now := u.Now()
 	u.mu.Lock()
 	cached, found := u.cache[key]
@@ -175,11 +180,33 @@ func (u *Usage) report(ctx context.Context, a usageAccount) (usageReport, error)
 	return report, nil
 }
 
+// cacheKey identifies a reading: the account and a hash of its Secret value.
+func cacheKey(a usageAccount) string {
+	return fmt.Sprintf("%s\x00%x", a.name, sha256.Sum256([]byte(a.secret)))
+}
+
+// prune drops the readings of Secret values no account holds any more, so
+// that rotated tokens do not pile up in the cache.
+func (u *Usage) prune(accounts []usageAccount) {
+	keep := make(map[string]bool, len(accounts))
+	for _, a := range accounts {
+		keep[cacheKey(a)] = true
+	}
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	for key := range u.cache {
+		if !keep[key] {
+			delete(u.cache, key)
+		}
+	}
+}
+
 // errNoLimits is a provider answer that carries no rate-limit window.
 var errNoLimits = errors.New("the answer has no rate limits")
 
-// usageRow is the row of one account. A limited account needs you, unless
-// it is a Claude account Kelos does not use now.
+// usageRow is the row of one account. A failing account needs you (a spare
+// one included: switching to it would fail); a limited one too, unless it
+// is a spare Claude account.
 func usageRow(a usageAccount, r usageReport, err error, now time.Time) Row {
 	row := Row{Source: SourceUsage, Origin: OriginKelos, Name: a.name, Target: Target{URL: claudeUsagePage}}
 	if a.codex {
@@ -195,7 +222,7 @@ func usageRow(a usageAccount, r usageReport, err error, now time.Time) Row {
 	}
 	row.State, row.Since = r.State, r.Read
 	row.Detail = mark + usageDetail(r, now)
-	row.NeedsYou = r.State == StateLimited && (a.codex || a.active)
+	row.NeedsYou = r.State == StateLimited && !a.spare
 	return row
 }
 
@@ -220,7 +247,7 @@ func usageDetail(r usageReport, now time.Time) string {
 }
 
 // stateOf is StateLimited when limited, else StateWarning when warned or
-// when a window is used past usageWarnPercent, else StateOK.
+// when a window's use is at or above usageWarnPercent, else StateOK.
 func stateOf(limited, warned bool, windows []usageWindow) string {
 	if limited {
 		return StateLimited

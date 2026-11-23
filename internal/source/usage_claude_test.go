@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -34,8 +35,12 @@ func claudeHeaders(status, used5h, used7d string) http.Header {
 func TestParseClaudeLimits(t *testing.T) {
 	t.Parallel()
 	reset5h := testNow.Add(2 * time.Hour)
+	reset7d := testNow.Add(3 * Day)
 	withResets := claudeHeaders("allowed", "0.12", "0.34")
 	withResets.Set("anthropic-ratelimit-unified-5h-reset", unixString(reset5h))
+	withResets.Set("anthropic-ratelimit-unified-7d-reset", unixString(reset7d))
+	bad7dReset := claudeHeaders("allowed", "", "0.1")
+	bad7dReset.Set("anthropic-ratelimit-unified-7d-reset", "later")
 	badReset := claudeHeaders("allowed", "0.1", "")
 	badReset.Set("anthropic-ratelimit-unified-5h-reset", "soon")
 	tests := []struct {
@@ -44,9 +49,9 @@ func TestParseClaudeLimits(t *testing.T) {
 		want    usageReport
 		wantErr string
 	}{
-		{"both windows with a reset", withResets, usageReport{State: StateOK, Windows: []usageWindow{
+		{"both windows with their resets", withResets, usageReport{State: StateOK, Windows: []usageWindow{
 			{Span: 5 * time.Hour, Used: 12, ResetsAt: reset5h},
-			{Span: 7 * Day, Used: 34},
+			{Span: 7 * Day, Used: 34, ResetsAt: reset7d},
 		}}, ""},
 		{"warning from the status", claudeHeaders("allowed_warning", "0.5", ""), usageReport{State: StateWarning, Windows: []usageWindow{
 			{Span: 5 * time.Hour, Used: 50},
@@ -61,6 +66,7 @@ func TestParseClaudeLimits(t *testing.T) {
 		{"no headers", http.Header{}, usageReport{}, "the answer has no rate limits"},
 		{"bad utilization", claudeHeaders("allowed", "lots", ""), usageReport{}, `5h utilization "lots"`},
 		{"bad reset", badReset, usageReport{}, `5h reset "soon"`},
+		{"bad 7d reset", bad7dReset, usageReport{}, `7d reset "later"`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -90,10 +96,10 @@ func unixString(t time.Time) string {
 type recorder struct {
 	mu     sync.Mutex
 	reqs   []*http.Request
-	bodies []claudeProbe
+	bodies [][]byte
 }
 
-func (r *recorder) add(req *http.Request, body claudeProbe) {
+func (r *recorder) add(req *http.Request, body []byte) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.reqs, r.bodies = append(r.reqs, req.Clone(context.Background())), append(r.bodies, body)
@@ -105,7 +111,7 @@ func (r *recorder) requests() []*http.Request {
 	return slices.Clone(r.reqs)
 }
 
-func (r *recorder) probes() []claudeProbe {
+func (r *recorder) rawBodies() [][]byte {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return slices.Clone(r.bodies)
@@ -117,9 +123,9 @@ func claudeServer(t *testing.T, status int, h http.Header) (*httptest.Server, *r
 	t.Helper()
 	rec := &recorder{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var body claudeProbe
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			t.Errorf("decoding the probe: %v", err)
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Errorf("reading the probe: %v", err)
 		}
 		rec.add(r, body)
 		for k, v := range h {
@@ -159,10 +165,17 @@ func TestClaudeProbe(t *testing.T) {
 	if req.Method != http.MethodPost {
 		t.Errorf("method = %s, want POST", req.Method)
 	}
-	wantBody := claudeProbe{Model: "claude-haiku-5-5", MaxTokens: 1, System: claudeProbeSystem,
-		Messages: []claudeMessage{{Role: "user", Content: "ok"}}}
-	if !reflect.DeepEqual(rec.probes()[0], wantBody) {
-		t.Errorf("body = %+v, want %+v", rec.probes()[0], wantBody)
+	// The body as the API reads it: its JSON keys, not the Go struct.
+	var gotBody map[string]any
+	if err := json.Unmarshal(rec.rawBodies()[0], &gotBody); err != nil {
+		t.Fatalf("decoding the probe: %v", err)
+	}
+	wantBody := map[string]any{
+		"model": "claude-haiku-5-5", "max_tokens": float64(1), "system": claudeProbeSystem,
+		"messages": []any{map[string]any{"role": "user", "content": "ok"}},
+	}
+	if !reflect.DeepEqual(gotBody, wantBody) {
+		t.Errorf("body = %v, want %v", gotBody, wantBody)
 	}
 }
 
