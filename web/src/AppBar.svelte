@@ -1,10 +1,13 @@
 <script lang="ts">
 	import { APP_NAME, formatTime, updatedText } from './lib/format';
 	import { FILTER_LABELS, type FilterKind } from './lib/filter';
-	import type { Counts } from './lib/model';
+	import type { Counts, Row } from './lib/model';
+	import UsageList from './UsageList.svelte';
 
 	interface Props {
 		counts: Counts;
+		/** The account usage readings, shown here rather than as rows. */
+		usage: readonly Row[];
 		/** The badge filtering the rows shown, undefined when none does. */
 		filter: FilterKind | undefined;
 		/** When the server last finished a refresh, undefined before. */
@@ -23,6 +26,7 @@
 
 	let {
 		counts,
+		usage,
 		filter,
 		fetchedAt,
 		now,
@@ -70,6 +74,7 @@
 			</li>
 		{/if}
 	</ul>
+	<UsageList {usage} />
 	<div class="actions">
 		<time
 			class="updated"

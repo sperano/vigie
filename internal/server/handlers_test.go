@@ -46,7 +46,7 @@ func TestSnapshotBeforeTheFirstRefresh(t *testing.T) {
 	if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "application/json" {
 		t.Errorf("status, type = %d, %q", resp.StatusCode, resp.Header.Get("Content-Type"))
 	}
-	const want = `{"fetched_at":null,"refreshing":false,"error":"","counts":{"need_you":0,"busy":0,"idle":0,"hidden":0,"done":0},"rows":[]}` + "\n"
+	const want = `{"fetched_at":null,"refreshing":false,"error":"","counts":{"need_you":0,"busy":0,"idle":0,"hidden":0,"done":0},"rows":[],"usage":[]}` + "\n"
 	if got := body(t, resp); got != want {
 		t.Errorf("body = %s\nwant   %s", got, want)
 	}
@@ -59,7 +59,7 @@ func TestSnapshotRowJSON(t *testing.T) {
 	const want = `{"fetched_at":"2026-11-15T12:00:00Z","refreshing":false,"error":"",` +
 		`"counts":{"need_you":1,"busy":0,"idle":0,"hidden":0,"done":0},"rows":[{"source":"pr","name":"vigie#3","label":"vigie#3","origin":"github",` +
 		`"depth":0,"guides":"","mark":"●","state":"review","since":"2026-11-15T11:00:00Z","age":"1h","detail":"Serve the board",` +
-		`"target":"` + prURL + `","severity":"attention","needs_you":true,"busy":false,"hidden":false,"hideable":true}]}` + "\n"
+		`"target":"` + prURL + `","severity":"attention","needs_you":true,"busy":false,"hidden":false,"hideable":true}],"usage":[]}` + "\n"
 	if got := body(t, do(t, h.srv, http.MethodGet, snapshotURL)); got != want {
 		t.Errorf("body = %s\nwant   %s", got, want)
 	}
@@ -472,4 +472,40 @@ func storedEntries(t *testing.T, f hidden.File) []hidden.Entry {
 		t.Fatal(err)
 	}
 	return set.Entries()
+}
+
+func TestSnapshotPutsUsageInTheHeader(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, nil)
+	const usageURL = "https://claude.ai/settings/usage"
+	usage := []source.Row{
+		{Source: source.SourceUsage, Origin: source.OriginKelos, Name: "codex-oauth", State: source.StateLimited, Detail: "[plus] 5h 100% resets 2h",
+			NeedsYou: true},
+		{Source: source.SourceUsage, Origin: source.OriginKelos, Name: "claude-oauth-primary", State: source.StateOK, Detail: "7d 3% resets 3d",
+			Target: source.Target{URL: usageURL}},
+	}
+	h.refreshWith(append(testRows()[1:2], usage...))
+	snap := decodeSnapshot(t, do(t, h.srv, http.MethodGet, snapshotURL))
+	if got := rowNames(snap); !slices.Equal(got, []string{"pr vigie#3"}) {
+		t.Errorf("rows = %q, want the PR alone", got)
+	}
+	if want := (Counts{NeedYou: 1}); snap.Counts != want {
+		t.Errorf("counts = %+v, want %+v: usage is not counted", snap.Counts, want)
+	}
+	want := []Row{
+		{Source: source.SourceUsage, Name: "claude-oauth-primary", State: source.StateOK, Detail: "7d 3% resets 3d", Target: usageURL,
+			Severity: board.SeverityQuiet},
+		{Source: source.SourceUsage, Name: "codex-oauth", State: source.StateLimited, Detail: "[plus] 5h 100% resets 2h",
+			Mark: board.MarkNeedsYou, Severity: board.SeverityBlocked, NeedsYou: true},
+	}
+	if len(snap.Usage) != len(want) {
+		t.Fatalf("usage = %+v, want %d readings", snap.Usage, len(want))
+	}
+	for i, w := range want {
+		g := snap.Usage[i]
+		if g.Source != w.Source || g.Name != w.Name || g.State != w.State || g.Detail != w.Detail || g.Target != w.Target ||
+			g.Mark != w.Mark || g.Severity != w.Severity || g.NeedsYou != w.NeedsYou {
+			t.Errorf("usage %d = %+v\nwant     %+v", i, g, w)
+		}
+	}
 }

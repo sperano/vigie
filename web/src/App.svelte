@@ -190,6 +190,7 @@
 <div class="app">
 	<AppBar
 		{counts}
+		usage={snapshot?.usage ?? []}
 		{filter}
 		fetchedAt={snapshot?.fetchedAt}
 		now={time}

@@ -170,7 +170,11 @@ func (m Model) clamp(i int) int {
 
 // bodyHeight is how many rows fit between the header and the footer.
 func (m Model) bodyHeight() int {
-	return max(1, m.height-chromeLines)
+	chrome := chromeLines
+	if hasUsage(m.rows) {
+		chrome++
+	}
+	return max(1, m.height-chrome)
 }
 
 // scrollToSelection moves the window so that the selected row is visible.

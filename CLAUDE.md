@@ -91,7 +91,11 @@ Bubble Tea v2 stack: `charm.land/bubbletea/v2`, `charm.land/bubbles/v2`,
   (source+name), not by index. Handle window resize.
 - Layout: header with time and `N need you · N busy · N idle` (busy counts
   agent rows only: local, kelos session, kelos task; a Task speaking for its
-  PR and Vikunja task is one busy agent); columns mark,
+  PR and Vikunja task is one busy agent); below it, the account usage
+  readings (the `usage` source, its error row included), one per account by
+  name: mark, name, state, DETAIL, coloured by severity. They are not table
+  rows: not counted, not selectable, never hidden; the web app bar links each
+  to its usage page. Then columns mark,
   TYPE, ORIGIN, NAME, STATE, AGE, DETAIL (DETAIL takes the remaining width, truncated
   with `…`); footer with key help and the last action or error. Needs-you rows
   are red with `●`, busy green (any busy row, not only agents), the rest dim. Sort: needs you, then busy, then
@@ -127,7 +131,7 @@ Bubble Tea v2 stack: `charm.land/bubbletea/v2`, `charm.land/bubbles/v2`,
 | pr | the PR URL |
 | kelos task | its Lucarne run, `<lucarne>/runs/<cluster>/<ns>/<Task UID>`; with no Lucarne URL (or no UID), its PR (`status.results.pr`); else the Vikunja task in label `vikunja.spe.quebec/task`; else `<console>/api/resources/tasks/<ns>/<name>/logs` (the console has no per-task page) |
 | kelos session | the console base URL |
-| usage | `https://claude.ai/settings/usage`, `https://chatgpt.com/codex/settings/usage` |
+| usage (header, web only: the TUI cannot select it) | `https://claude.ai/settings/usage`, `https://chatgpt.com/codex/settings/usage` |
 | local claude | `tmux switch-client -t <pane>` when `$TMUX` is set (the stored value looks like `hollingsworth:@5.%6`); otherwise footer "not in tmux" |
 | error | nothing |
 

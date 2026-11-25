@@ -50,6 +50,8 @@ export interface Snapshot {
 	readonly counts: Counts;
 	/** Nested and sorted, as they are drawn. */
 	readonly rows: readonly Row[];
+	/** The account usage readings, by name: shown in the header, not counted. */
+	readonly usage: readonly Row[];
 }
 
 /** The mark of a row that needs you (internal/board/board.go). */
