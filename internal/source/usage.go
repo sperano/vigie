@@ -32,6 +32,14 @@ const (
 	// activeMark starts the DETAIL of the Claude account Kelos uses now.
 	activeMark = "[active] "
 	usageSep   = " · "
+	// codexLabel is the header NAME shown for the Codex account: the Secret
+	// name on its own is too wide for the header.
+	codexLabel = "codex"
+	// claudeLabelPrefix starts the header NAME shown for a Claude account,
+	// followed by its 1-based position in ClaudeSecrets ("claude1",
+	// "claude2", ...): the Secret name on its own is too wide for the
+	// header.
+	claudeLabelPrefix = "claude"
 )
 
 // Where enter opens a usage row: each provider's usage page.
@@ -64,6 +72,9 @@ type usageAccount struct {
 	// spare is a Claude account Kelos is known not to run on now: the
 	// active copy is readable and holds another token.
 	spare bool
+	// claudeIndex is the account's 1-based position in ClaudeSecrets, for
+	// its label ("claude1", "claude2", ...); unused for Codex.
+	claudeIndex int
 }
 
 // Usage reports the subscription limits (the 5 h and weekly windows) of the
@@ -116,14 +127,14 @@ func (u *Usage) accounts(ctx context.Context) ([]usageAccount, error) {
 		return nil, err
 	}
 	var accounts []usageAccount
-	for _, name := range u.ClaudeSecrets {
+	for i, name := range u.ClaudeSecrets {
 		token, err := u.optionalSecret(ctx, name, claudeTokenKey)
 		if err != nil {
 			return nil, err
 		}
 		if token != "" {
 			accounts = append(accounts, usageAccount{name: name, secret: token,
-				active: token == active, spare: active != "" && token != active})
+				active: token == active, spare: active != "" && token != active, claudeIndex: i + 1})
 		}
 	}
 	auth, err := u.optionalSecret(ctx, u.CodexSecret, codexAuthKey)
@@ -208,8 +219,10 @@ var errNoLimits = errors.New("the answer has no rate limits")
 // one included: switching to it would fail); a limited one too, unless it
 // is a spare Claude account.
 func usageRow(a usageAccount, r usageReport, err error, now time.Time) Row {
-	row := Row{Source: SourceUsage, Origin: OriginKelos, Name: a.name, Target: Target{URL: claudeUsagePage}}
+	row := Row{Source: SourceUsage, Origin: OriginKelos, Name: a.name, Label: claudeLabelPrefix + fmt.Sprint(a.claudeIndex),
+		Target: Target{URL: claudeUsagePage}}
 	if a.codex {
+		row.Label = codexLabel
 		row.Target.URL = codexUsagePage
 	}
 	mark := ""

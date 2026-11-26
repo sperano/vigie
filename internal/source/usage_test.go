@@ -67,11 +67,11 @@ func TestUsageFetch(t *testing.T) {
 	}
 	claudeDetail := "5h 25% · 7d 50%"
 	want := []Row{
-		{Source: SourceUsage, Origin: OriginKelos, Name: primarySecret, State: StateOK, Since: testNow,
+		{Source: SourceUsage, Origin: OriginKelos, Name: primarySecret, Label: "claude1", State: StateOK, Since: testNow,
 			Detail: claudeDetail, Target: Target{URL: claudeUsagePage}},
-		{Source: SourceUsage, Origin: OriginKelos, Name: secondarySecret, State: StateOK, Since: testNow,
+		{Source: SourceUsage, Origin: OriginKelos, Name: secondarySecret, Label: "claude2", State: StateOK, Since: testNow,
 			Detail: "[active] " + claudeDetail, Target: Target{URL: claudeUsagePage}},
-		{Source: SourceUsage, Origin: OriginKelos, Name: codexSecret, State: StateOK, Since: testNow,
+		{Source: SourceUsage, Origin: OriginKelos, Name: codexSecret, Label: "codex", State: StateOK, Since: testNow,
 			Detail: "[pro] 5h 7% resets 10m · 7d 31%", Target: Target{URL: codexUsagePage}},
 	}
 	if !reflect.DeepEqual(rows, want) {
