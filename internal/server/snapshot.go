@@ -14,6 +14,9 @@ type Snapshot struct {
 	Error      string     `json:"error"` // the last hidden-row update's error
 	Counts     Counts     `json:"counts"`
 	Rows       []Row      `json:"rows"` // nested and sorted, as they are drawn
+	// Usage are the account usage readings the header shows, by name; they
+	// are not in Rows nor counted.
+	Usage []Row `json:"usage"`
 }
 
 // Counts are the header counts; hidden rows are left out of the others.
@@ -56,11 +59,18 @@ func (s *Server) snapshot(showHidden, hideDone bool) Snapshot {
 	b := board.Build(rows, set, showHidden, hideDone, s.opts.Now())
 	snap.FetchedAt = optionalTime(fetchedAt)
 	snap.Counts = Counts{NeedYou: b.Counts.NeedYou, Busy: b.Counts.Busy, Idle: b.Counts.Idle, Hidden: b.Counts.Hidden, Done: b.Counts.Done}
-	snap.Rows = make([]Row, 0, len(b.Entries))
-	for _, e := range b.Entries {
-		snap.Rows = append(snap.Rows, newRow(e))
-	}
+	snap.Rows = newRows(b.Entries)
+	snap.Usage = newRows(b.Usage)
 	return snap
+}
+
+// newRows converts entries, never to nil, which JSON would show as null.
+func newRows(entries []board.Entry) []Row {
+	rows := make([]Row, 0, len(entries))
+	for _, e := range entries {
+		rows = append(rows, newRow(e))
+	}
+	return rows
 }
 
 func newRow(e board.Entry) Row {

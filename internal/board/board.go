@@ -29,10 +29,14 @@ type Entry struct {
 	Severity Severity
 }
 
-// Board is the rows in display order and the header counts.
+// Board is the rows in display order, the header counts, and the account
+// usage readings the header shows instead of the table.
 type Board struct {
 	Entries []Entry
 	Counts  Counts
+	// Usage are the usage rows, by name; they are neither in Entries nor
+	// counted, and never hidden.
+	Usage []Entry
 }
 
 // Build arranges the rows that are not hidden or, with showHidden, every
@@ -40,8 +44,9 @@ type Board struct {
 // top level when it is not. With hideDone, a done Kelos Task row is dropped
 // the same way, its children reparented to the top level. The counts leave
 // the hidden rows out either way, and count done rows regardless of
-// hideDone. rows may be in any order.
+// hideDone. The usage rows go to Usage instead. rows may be in any order.
 func Build(rows []source.Row, set hidden.Set, showHidden bool, hideDone bool, now time.Time) Board {
+	rows, usage := splitUsage(rows)
 	shown, hiddenCount := set.Split(rows)
 	listed := shown
 	if showHidden {
@@ -57,7 +62,7 @@ func Build(rows []source.Row, set hidden.Set, showHidden bool, hideDone bool, no
 	counts := count(shown)
 	counts.Hidden = hiddenCount
 	counts.Done = countDone(shown)
-	return Board{Entries: entries, Counts: counts}
+	return Board{Entries: entries, Counts: counts, Usage: usageEntries(usage, now)}
 }
 
 // isDoneTask reports whether r is a Kelos Task row shown as done. A Task

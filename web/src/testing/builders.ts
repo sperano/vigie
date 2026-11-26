@@ -33,6 +33,7 @@ export function snapshot(rows: readonly Row[], fields: Partial<Snapshot> = {}): 
 		error: '',
 		counts: { needYou: 0, busy: 0, idle: 0, hidden: 0, done: 0 },
 		rows,
+		usage: [],
 		...fields
 	};
 }
@@ -73,6 +74,7 @@ export function snapshotJSON(s: Snapshot): Record<string, unknown> {
 			hidden: s.counts.hidden,
 			done: s.counts.done
 		},
-		rows: s.rows.map(rowJSON)
+		rows: s.rows.map(rowJSON),
+		usage: s.usage.map(rowJSON)
 	};
 }

@@ -120,17 +120,24 @@ function decodeCounts(value: unknown, path: string): Counts {
 	};
 }
 
+function decodeRows(o: Fields, key: string, path: string): Row[] {
+	const rows = o[key];
+	if (!Array.isArray(rows)) throw new DecodeError(`${path}.${key} is not an array`);
+	return rows.map((r, i) => decodeRow(r, `${path}.${key}[${i}]`));
+}
+
 /** Decodes a snapshot, throwing a DecodeError that says what is wrong. */
 export function decodeSnapshot(value: unknown): Snapshot {
 	const path = 'snapshot';
 	const o = object(value, path);
-	const rows = o['rows'];
-	if (!Array.isArray(rows)) throw new DecodeError(`${path}.rows is not an array`);
+	const rows = decodeRows(o, 'rows', path);
+	const usage = decodeRows(o, 'usage', path);
 	return {
 		fetchedAt: optionalTime(o, 'fetched_at', path),
 		refreshing: boolean(o, 'refreshing', path),
 		error: string(o, 'error', path),
 		counts: decodeCounts(o['counts'], `${path}.counts`),
-		rows: rows.map((r, i) => decodeRow(r, `${path}.rows[${i}]`))
+		rows,
+		usage
 	};
 }

@@ -170,7 +170,27 @@ func (m Model) clamp(i int) int {
 
 // bodyHeight is how many rows fit between the header and the footer.
 func (m Model) bodyHeight() int {
-	return max(1, m.height-chromeLines)
+	return m.bodyHeightFor(m.build(m.opts.Now()))
+}
+
+// bodyHeightFor is bodyHeight for the board b, built for the current time.
+func (m Model) bodyHeightFor(b board.Board) int {
+	chrome := chromeLines + len(m.usageLinesFor(b))
+	return max(minBodyLines, m.height-chrome)
+}
+
+// minBodyLines is the fewest rows the body keeps, however short the terminal.
+const minBodyLines = 1
+
+// usageLinesFor is the usage lines of b, the board built for the current
+// time, wrapped at the terminal width and capped so that the view fits its
+// height with minBodyLines rows. An unknown height caps nothing.
+func (m Model) usageLinesFor(b board.Board) []string {
+	lines := usageLines(m.styles, b.Usage, m.width)
+	if m.height <= 0 {
+		return lines
+	}
+	return lines[:min(len(lines), max(0, m.height-chromeLines-minBodyLines))]
 }
 
 // scrollToSelection moves the window so that the selected row is visible.

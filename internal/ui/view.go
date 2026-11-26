@@ -62,11 +62,9 @@ func titleLine(counts board.Counts, now time.Time) string {
 func Snapshot(rows []source.Row, set hidden.Set, now time.Time, width int, color bool) string {
 	st := newStyles(color)
 	b := board.Build(rows, set, false, false, now)
-	lines := []string{
-		st.bold.Render(titleLine(b.Counts, now)),
-		"",
-		st.bold.Render(trimLine(headerLine(width))),
-	}
+	lines := []string{st.bold.Render(titleLine(b.Counts, now))}
+	lines = append(lines, usageLines(st, b.Usage, width)...)
+	lines = append(lines, "", st.bold.Render(trimLine(headerLine(width))))
 	for _, e := range b.Entries {
 		lines = append(lines, st.entry(e).Render(trimLine(rowLine(e, width))))
 	}
@@ -74,7 +72,7 @@ func Snapshot(rows []source.Row, set hidden.Set, now time.Time, width int, color
 }
 
 // chromeLines counts the TUI lines around the rows: title, blank line,
-// column header, status line and key help.
+// column header, status line and key help; usage readings add their lines.
 const chromeLines = 5
 
 const (
@@ -87,22 +85,21 @@ func (m Model) View() tea.View {
 	now := m.opts.Now()
 	b := m.build(now)
 	st := m.styles
-	lines := []string{
-		st.bold.Render(fit(titleLine(b.Counts, now), m.width)),
-		"",
-		st.bold.Render(fit(headerLine(m.width), m.width)),
-	}
-	lines = append(lines, m.bodyLines(b.Entries)...)
+	lines := []string{st.bold.Render(fit(titleLine(b.Counts, now), m.width))}
+	lines = append(lines, m.usageLinesFor(b)...)
+	lines = append(lines, "", st.bold.Render(fit(headerLine(m.width), m.width)))
+	lines = append(lines, m.bodyLines(b)...)
 	lines = append(lines, fit(m.statusLine(), m.width), st.rest.Render(fit(keyHelp, m.width)))
 	v := tea.NewView(strings.Join(lines, "\n"))
 	v.AltScreen = true
 	return v
 }
 
-// bodyLines renders the visible entries, padded to the body height. entries
-// are those of the board View builds for the current time.
-func (m Model) bodyLines(entries []board.Entry) []string {
-	body := m.bodyHeight()
+// bodyLines renders the visible entries of b, padded to the body height. b is
+// the board View builds for the current time.
+func (m Model) bodyLines(b board.Board) []string {
+	entries := b.Entries
+	body := m.bodyHeightFor(b)
 	lines := make([]string, 0, body)
 	if len(entries) == 0 && !m.refreshing {
 		lines = append(lines, m.styles.rest.Render(statusNoRows))
