@@ -86,7 +86,7 @@ func (m Model) View() tea.View {
 	b := m.build(now)
 	st := m.styles
 	lines := []string{st.bold.Render(fit(titleLine(b.Counts, now), m.width))}
-	lines = append(lines, usageLines(st, b.Usage, m.width)...)
+	lines = append(lines, m.usageLinesFor(b)...)
 	lines = append(lines, "", st.bold.Render(fit(headerLine(m.width), m.width)))
 	lines = append(lines, m.bodyLines(b)...)
 	lines = append(lines, fit(m.statusLine(), m.width), st.rest.Render(fit(keyHelp, m.width)))

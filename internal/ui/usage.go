@@ -12,13 +12,18 @@ const (
 	usagePrefix = "usage: "
 	// usageSep separates the accounts on that line.
 	usageSep = " · "
+	// minUsageItemWidth is the fewest cells an account keeps on a line too
+	// narrow for it, so that it never disappears.
+	minUsageItemWidth = 1
 )
 
 // usageLines are the header lines of the account usage readings, each
 // coloured by its severity and marked when it needs you; none when there are
 // no readings. The accounts wrap onto further lines, indented under the
 // first, so that none is cut off at width; an account wider than a line alone
-// is truncated. A width of zero or less keeps them on one line.
+// is truncated, keeping at least its first cell (or the ellipsis) even when
+// the indent alone fills the width. A width of zero or less keeps them on one
+// line.
 func usageLines(st styles, usage []board.Entry, width int) []string {
 	if len(usage) == 0 {
 		return nil
@@ -40,7 +45,7 @@ func usageLines(st styles, usage []board.Entry, width int) []string {
 			line, lineWidth = indent, prefixWidth
 		}
 		if width > 0 {
-			item = fit(item, width-lineWidth)
+			item = fit(item, max(minUsageItemWidth, width-lineWidth))
 		}
 		line += st.entry(e).Render(item)
 		lineWidth += ansi.StringWidth(item)
