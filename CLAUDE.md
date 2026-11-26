@@ -93,7 +93,8 @@ Bubble Tea v2 stack: `charm.land/bubbletea/v2`, `charm.land/bubbles/v2`,
   agent rows only: local, kelos session, kelos task; a Task speaking for its
   PR and Vikunja task is one busy agent); below it, the account usage
   readings (the `usage` source, its error row included), one per account by
-  name: mark, name, state, DETAIL, coloured by severity. They are not table
+  name: mark, name, state, DETAIL, coloured by severity, wrapped onto
+  further lines rather than cut off at the terminal width. They are not table
   rows: not counted, not selectable, never hidden; the web app bar links each
   to its usage page. Then columns mark,
   TYPE, ORIGIN, NAME, STATE, AGE, DETAIL (DETAIL takes the remaining width, truncated
@@ -207,4 +208,4 @@ the loaded set to the new path on its first change.
 - Work in a git worktree under `.claude/worktrees/<branch>`; never on `main`.
   End every task with a PR.
 - Before calling the work done, run `vigie --once` against the live sources and
-  confirm that rows come from all five (six with account usage).
+  confirm that rows come from all five, and the account usage line too.

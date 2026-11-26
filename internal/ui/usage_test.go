@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/sperano/vigie/internal/hidden"
 	"github.com/sperano/vigie/internal/source"
 )
@@ -73,5 +74,52 @@ func TestViewUsageLineTakesABodyRow(t *testing.T) {
 	}
 	if len(m.entries) != 1 || m.entries[0].Row.Name != "vigie#3" {
 		t.Errorf("selectable entries = %+v, want the PR alone", m.entries)
+	}
+}
+
+func TestUsageLinesWrapAtWidth(t *testing.T) {
+	t.Parallel()
+	primary := "claude-oauth-primary ok 7d 3% resets 3d"
+	codex := "● codex-oauth limited [plus] 5h 100% resets 2h"
+	indent := strings.Repeat(" ", len(usagePrefix))
+	m := newTestModel(&fakeOpener{}, false, usageRows()...)
+	usage := m.build(testNow).Usage
+	tests := []struct {
+		name  string
+		width int
+		want  []string
+	}{
+		{"no width keeps one line", 0, []string{wantUsageLine}},
+		{"wide enough keeps one line", ansi.StringWidth(wantUsageLine), []string{wantUsageLine}},
+		{"one cell short wraps", ansi.StringWidth(wantUsageLine) - 1, []string{usagePrefix + primary, indent + codex}},
+		{"an account wider than a line is truncated", len(usagePrefix) + 10, []string{usagePrefix + "claude-oa…", indent + "● codex-o…"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := usageLines(styles{}, usage, tt.width)
+			if strings.Join(got, "\n") != strings.Join(tt.want, "\n") {
+				t.Errorf("usageLines(%d) = %q\nwant %q", tt.width, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNarrowViewWrapsUsageAndShrinksTheBody(t *testing.T) {
+	t.Parallel()
+	const height = 10
+	narrow := ansi.StringWidth(wantUsageLine) - 1
+	m := newTestModel(&fakeOpener{}, false, usageRows()...)
+	m = send(m, tea.WindowSizeMsg{Width: narrow, Height: height})
+	lines := strings.Split(m.View().Content, "\n")
+	if len(lines) != height {
+		t.Errorf("view has %d lines, want %d", len(lines), height)
+	}
+	want := strings.Repeat(" ", len(usagePrefix)) + "● codex-oauth limited [plus] 5h 100% resets 2h"
+	if lines[2] != want {
+		t.Errorf("second usage line = %q\nwant              %q", lines[2], want)
+	}
+	if got, want := m.bodyHeight(), height-chromeLines-2; got != want {
+		t.Errorf("body height = %d, want %d", got, want)
 	}
 }

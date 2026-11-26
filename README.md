@@ -213,7 +213,7 @@ or `GITHUB_TOKEN` (there is no `gh` in the image).
 ## Types and origins
 
 TYPE says what a row represents. ORIGIN says where its work began: `local`
-for local Claude sessions, `kelos` for Kelos Sessions and account usage,
+for local Claude sessions, `kelos` for Kelos Sessions,
 `github` for PRs,
 and `vikunja` for Vikunja tasks. Kelos Tasks use the explicit
 `kelos.dev/origin` label, whose supported values are `github`, `vikunja`,
@@ -242,7 +242,8 @@ fails, rows keep their own state. The header's busy count is agents only
 and its Vikunja task counts once.
 
 The account usage readings are shown on a line of their own under the header
-counts (in the web UI, in the app bar), each account coloured by its state and
+counts (wrapped onto further lines when the terminal is too narrow; in the web
+UI, in the app bar), each account coloured by its state and
 marked `●` when it needs you, rather than as table rows. They are left out of
 the counts and cannot be hidden.
 

@@ -3,8 +3,8 @@ package ui
 import (
 	"strings"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/sperano/vigie/internal/board"
-	"github.com/sperano/vigie/internal/source"
 )
 
 const (
@@ -14,17 +14,38 @@ const (
 	usageSep = " · "
 )
 
-// usageLine is the header line of the account usage readings, each coloured
-// by its severity and marked when it needs you; empty when there are none.
-func usageLine(st styles, usage []board.Entry) string {
+// usageLines are the header lines of the account usage readings, each
+// coloured by its severity and marked when it needs you; none when there are
+// no readings. The accounts wrap onto further lines, indented under the
+// first, so that none is cut off at width; an account wider than a line alone
+// is truncated. A width of zero or less keeps them on one line.
+func usageLines(st styles, usage []board.Entry, width int) []string {
 	if len(usage) == 0 {
-		return ""
+		return nil
 	}
-	items := make([]string, 0, len(usage))
-	for _, e := range usage {
-		items = append(items, st.entry(e).Render(usageItem(e)))
+	prefixWidth, sepWidth := ansi.StringWidth(usagePrefix), ansi.StringWidth(usageSep)
+	indent := strings.Repeat(" ", prefixWidth)
+	var lines []string
+	line, lineWidth := usagePrefix, prefixWidth
+	for i, e := range usage {
+		item := usageItem(e)
+		w := ansi.StringWidth(item)
+		switch {
+		case i == 0:
+		case width <= 0 || lineWidth+sepWidth+w <= width:
+			line += usageSep
+			lineWidth += sepWidth
+		default:
+			lines = append(lines, line)
+			line, lineWidth = indent, prefixWidth
+		}
+		if width > 0 {
+			item = fit(item, width-lineWidth)
+		}
+		line += st.entry(e).Render(item)
+		lineWidth += ansi.StringWidth(item)
 	}
-	return usagePrefix + strings.Join(items, usageSep)
+	return append(lines, line)
 }
 
 // usageItem is one account: its mark, name, state and detail.
@@ -38,14 +59,4 @@ func usageItem(e board.Entry) string {
 		parts = append(parts, d)
 	}
 	return strings.Join(parts, " ")
-}
-
-// hasUsage reports whether rows hold a usage row, which takes a header line.
-func hasUsage(rows []source.Row) bool {
-	for _, r := range rows {
-		if r.Source == source.SourceUsage {
-			return true
-		}
-	}
-	return false
 }

@@ -170,10 +170,12 @@ func (m Model) clamp(i int) int {
 
 // bodyHeight is how many rows fit between the header and the footer.
 func (m Model) bodyHeight() int {
-	chrome := chromeLines
-	if hasUsage(m.rows) {
-		chrome++
-	}
+	return m.bodyHeightFor(m.build(m.opts.Now()))
+}
+
+// bodyHeightFor is bodyHeight for the board b, built for the current time.
+func (m Model) bodyHeightFor(b board.Board) int {
+	chrome := chromeLines + len(usageLines(m.styles, b.Usage, m.width))
 	return max(1, m.height-chrome)
 }
 
