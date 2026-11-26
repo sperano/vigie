@@ -67,11 +67,11 @@ func TestUsageFetch(t *testing.T) {
 	}
 	claudeDetail := "5h 25% · 7d 50%"
 	want := []Row{
-		{Source: SourceUsage, Origin: OriginKelos, Name: primarySecret, State: StateOK, Since: testNow,
+		{Source: SourceUsage, Origin: OriginKelos, Name: primarySecret, Label: "claude1", State: StateOK, Since: testNow,
 			Detail: claudeDetail, Target: Target{URL: claudeUsagePage}},
-		{Source: SourceUsage, Origin: OriginKelos, Name: secondarySecret, State: StateOK, Since: testNow,
+		{Source: SourceUsage, Origin: OriginKelos, Name: secondarySecret, Label: "claude2", State: StateOK, Since: testNow,
 			Detail: "[active] " + claudeDetail, Target: Target{URL: claudeUsagePage}},
-		{Source: SourceUsage, Origin: OriginKelos, Name: codexSecret, State: StateOK, Since: testNow,
+		{Source: SourceUsage, Origin: OriginKelos, Name: codexSecret, Label: "codex", State: StateOK, Since: testNow,
 			Detail: "[pro] 5h 7% resets 10m · 7d 31%", Target: Target{URL: codexUsagePage}},
 	}
 	if !reflect.DeepEqual(rows, want) {
@@ -259,9 +259,9 @@ func TestUsageRow(t *testing.T) {
 	t.Parallel()
 	limited := usageReport{State: StateLimited, Read: testNow, Windows: []usageWindow{{Span: 5 * time.Hour, Used: 100, ResetsAt: testNow.Add(90 * time.Minute)}}}
 	ok := usageReport{State: StateOK, Read: testNow, Windows: []usageWindow{{Span: 7 * Day, Used: 3}}}
-	spare := usageAccount{name: primarySecret, spare: true}
-	unknown := usageAccount{name: primarySecret}
-	active := usageAccount{name: primarySecret, active: true}
+	spare := usageAccount{name: primarySecret, spare: true, claudeIndex: 1}
+	unknown := usageAccount{name: primarySecret, claudeIndex: 1}
+	active := usageAccount{name: primarySecret, active: true, claudeIndex: 1}
 	codex := usageAccount{name: codexSecret, codex: true}
 	tests := []struct {
 		name       string
@@ -271,22 +271,24 @@ func TestUsageRow(t *testing.T) {
 		wantState  string
 		wantDetail string
 		wantNeeds  bool
+		wantLabel  string
 	}{
-		{"limited active claude needs you", active, limited, nil, StateLimited, "[active] 5h 100% resets 1h", true},
-		{"limited spare claude does not", spare, limited, nil, StateLimited, "5h 100% resets 1h", false},
-		{"limited claude with no known active one needs you", unknown, limited, nil, StateLimited, "5h 100% resets 1h", true},
-		{"limited codex needs you", codex, limited, nil, StateLimited, "5h 100% resets 1h", true},
-		{"ok active claude", active, ok, nil, StateOK, "[active] 7d 3%", false},
-		{"error on spare claude needs you", spare, usageReport{}, errors.New("claude: HTTP 401 Unauthorized"), StateError, "claude: HTTP 401 Unauthorized", true},
-		{"error needs you", active, usageReport{}, errors.New("claude: HTTP 401 Unauthorized"), StateError, "[active] claude: HTTP 401 Unauthorized", true},
+		{"limited active claude needs you", active, limited, nil, StateLimited, "[active] 5h 100% resets 1h", true, "claude1"},
+		{"limited spare claude does not", spare, limited, nil, StateLimited, "5h 100% resets 1h", false, "claude1"},
+		{"limited claude with no known active one needs you", unknown, limited, nil, StateLimited, "5h 100% resets 1h", true, "claude1"},
+		{"limited codex needs you", codex, limited, nil, StateLimited, "5h 100% resets 1h", true, "codex"},
+		{"ok active claude", active, ok, nil, StateOK, "[active] 7d 3%", false, "claude1"},
+		{"error on spare claude needs you", spare, usageReport{}, errors.New("claude: HTTP 401 Unauthorized"), StateError, "claude: HTTP 401 Unauthorized", true, "claude1"},
+		{"error needs you", active, usageReport{}, errors.New("claude: HTTP 401 Unauthorized"), StateError, "[active] claude: HTTP 401 Unauthorized", true, "claude1"},
+		{"error on codex needs you", codex, usageReport{}, errors.New("codex: HTTP 401 Unauthorized"), StateError, "codex: HTTP 401 Unauthorized", true, "codex"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			got := usageRow(tt.account, tt.report, tt.err, testNow)
-			if got.State != tt.wantState || got.Detail != tt.wantDetail || got.NeedsYou != tt.wantNeeds {
-				t.Errorf("got state %q detail %q needs you %v, want %q %q %v",
-					got.State, got.Detail, got.NeedsYou, tt.wantState, tt.wantDetail, tt.wantNeeds)
+			if got.State != tt.wantState || got.Detail != tt.wantDetail || got.NeedsYou != tt.wantNeeds || got.Label != tt.wantLabel {
+				t.Errorf("got state %q detail %q needs you %v label %q, want %q %q %v %q",
+					got.State, got.Detail, got.NeedsYou, got.Label, tt.wantState, tt.wantDetail, tt.wantNeeds, tt.wantLabel)
 			}
 			if got.IsSourceError() {
 				t.Error("an account row must not be the source's error row")
